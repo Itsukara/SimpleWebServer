@@ -10,6 +10,8 @@ const get_server = http.createServer();
 
 var fileContent = {};
 var fileLastModified = {};
+var fsWait = {};
+const fsWaitTime = 500
 
 var {PythonShell} = require('python-shell');
 var options = {
@@ -19,15 +21,21 @@ var options = {
 }
 
 var watch_config = [
-    {filePath: "./web01-input.txt", python_file: "./web01.py"},
-    {filePath: "./web01.html"     , python_file: ""},
-    {filePath: "./web02.html"     , python_file: ""},
+    {filePath: "dir01/web01-input.txt", python_file: "dir01/web01.py"},
+    {filePath: "dir01/web01.html"     , python_file: ""},
+    {filePath: "dir02/web02-input.txt", python_file: "dir02/web02.py"},
+    {filePath: "dir02/web02.html"     , python_file: ""},
 ]
 
 watch_config.forEach(function({ filePath, python_file}) {
+    filePath = './' +  filePath
     console.log(`filePath=${filePath}, python_file=${python_file}`)
     fs.watch(filePath, function(eventType, filename) {
-        console.log(`CHANGED: ${filePath}`)
+        if (fsWait[filePath]) return
+        fsWait[filePath] = true
+        setTimeout(() => fsWait[filePath] = false, fsWaitTime);
+        
+        console.log(`CHANGED: ${filePath} eventType:${eventType}`)
         if (python_file) {
             PythonShell.run(python_file, options, function (err, result) {
                 console.log(`EXECUTED: ${python_file}`)
