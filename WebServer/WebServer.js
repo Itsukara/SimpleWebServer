@@ -30,10 +30,14 @@ var watch_config = [
 ]
 
 function update_fileLastModified(filePath) {
-    fs.stat(filePath, function(err, stats) {
-        var { mtime } = stats;
-        fileLastModified[filePath] = mtime.toISOString();
-        console.log(`SET: fileLastModified[${filePath}] = ${mtime.toISOString()}`)
+    return new Promise(function (resolve) {
+        fs.stat(filePath, function(err, stats) {
+            var { mtime } = stats;
+            let lastModified = mtime.toISOString();
+            fileLastModified[filePath] = lastModified
+            console.log(`SET: fileLastModified[${filePath}] = ${lastModified}`)
+            resolve(lastModified);
+        })
     })
 }
 
@@ -41,44 +45,51 @@ watch_config.forEach(function({ filePath, python_file}) {
     filePath = ROOTD +  filePath
     python_file = ROOTD + python_file
     console.log(`WATCH: filePath=${filePath}, python_file=${python_file}`)
-    fs.watch(filePath, function(eventType, filename) {
-        if (fsWait[filePath]) return
-        fsWait[filePath] = true
-        setTimeout(() => fsWait[filePath] = false, fsWaitTime);
-        update_fileLastModified(filePath)        
 
-        console.log(`CHANGED: ${filePath} eventType:${eventType}`)
-        if (python_file) {
-            PythonShell.run(python_file, options, function (err, result) {
-                console.log(`EXECUTED: ${python_file}`)
-                if (err) {
-                    console.log(`ERROR: ${err}`)
-                } else {
-                    console.log(`RESULT: \n${result}\n`)
-                }
+    update_fileLastModified(filePath).then(function(lastModified) {
+        watch_list.push(filePath)
+        fs.watch(filePath, function(eventType, filename) {
+            if (fsWait[filePath]) return
+            fsWait[filePath] = true
+            setTimeout(() => fsWait[filePath] = false, fsWaitTime);
+            console.log(`CHANGED: ${filePath} eventType:${eventType}`)
+     
+            update_fileLastModified(filePath).then(function(lastModified) {
+                PythonShell.run(python_file, options, function (error, result) {
+                    console.log(`EXECUTED: ${python_file}`)
+                    if (error) {
+                        console.log(`ERROR: ${error}`)
+                    } else {
+                        console.log(`RESULT: \n${result}\n`)
+                    }
+                })
             })
-        }
+        })
     })
-    update_fileLastModified(filePath)
-    watch_list.push(filePath)
 })
 
 function watch_file(filePath) {
     console.log(`WATCH: filePath=${filePath}`)
-    fs.watch(filePath, function(eventType, filename) {
-        if (fsWait[filePath]) return
-        fsWait[filePath] = true
-        setTimeout(() => fsWait[filePath] = false, fsWaitTime);
-        
-        console.log(`CHANGED: ${filePath} eventType:${eventType}`)
-        fs.readFile(filePath, function(error, content) {
-            fileContent[filePath] = content;
-            console.log(`UPDATED: fileContent[${filePath}]`)
-            update_fileLastModified(filePath)
+    update_fileLastModified(filePath).then(function(lastModified) {
+        watch_list.push(filePath)
+        fs.watch(filePath, function(eventType, filename) {
+            if (fsWait[filePath]) return
+            fsWait[filePath] = true
+            setTimeout(() => fsWait[filePath] = false, fsWaitTime);
+            console.log(`CHANGED: ${filePath} eventType:${eventType}`)
+
+            update_fileLastModified(filePath).then(function(lastModified) {
+                fs.readFile(filePath, function(error, content) {
+                    if (error) {
+                        console.log(`ERROR: ${error}`)
+                    } else {
+                        fileContent[filePath] = content;
+                        console.log(`UPDATED: fileContent[${filePath}]`)
+                    }           
+                })
+            })
         })
     })
-    update_fileLastModified(filePath)
-    watch_list.push(filePath)
 }
 
 get_server.on('request', function (request, response) {
@@ -90,14 +101,14 @@ get_server.on('request', function (request, response) {
     if (filePath.indexOf(ASK_SYMBOL) != -1) {
         filePath = filePath.replace(ASK_SYMBOL, "")
         let ip = response.socket.remoteAddress;
-        let  port = response.socket.remotePort;
+        let port = response.socket.remotePort;
         console.log('ASK from ', ip + ":" + port + " ", filePath)
 
         let lastModified = fileLastModified[filePath] || ASK_NOT_FOUND;
         response.end(lastModified, 'utf-8');
     } else {
         let ip = response.socket.remoteAddress;
-        let  port = response.socket.remotePort;
+        let port = response.socket.remotePort;
         console.log('GET from ', ip + ":" + port + " ", filePath)
 
         let extname = String(path.extname(filePath)).toLowerCase();
@@ -122,38 +133,39 @@ get_server.on('request', function (request, response) {
         let contentType = mimeTypes[extname] || 'application/octet-stream';
         let content = fileContent[filePath]
 
-        if (filePath == ROOTD + "watch_list.txt") {
-            response.writeHead(200, { 'Content-Type': contentType });
-            list = []
-            watch_list.forEach(f => {
-                list.push(fileLastModified[f] + ": " + f )
-            });
-            list.sort()
-            content = list.join("\n")
-            response.end(content, 'utf-8');
-        } else if (!content) {
-            console.log("readFile: " + filePath)
-            fs.readFile(filePath, function(error, content) {
-                if (error) {
-                    if(error.code == 'ENOENT') {
-                        fs.readFile('./404.html', function(error, content) {
-                            response.writeHead(200, { 'Content-Type': contentType });
-                            response.end(content, 'utf-8');
-                        });
+        if (!content) {
+            if (filePath == ROOTD + "watch_list") {
+                response.writeHead(200, { 'Content-Type': 'text/plain' });
+                list = []
+                watch_list.forEach(f => {
+                    list.push(fileLastModified[f] + ": " + f )
+                });
+                list.sort()
+                content = list.join("\n")
+                response.end(content, 'utf-8');
+            } else {
+                console.log("READFILE: " + filePath)
+                fs.readFile(filePath, function(error, content) {
+                    if (error) {
+                        if(error.code == 'ENOENT') {
+                            fs.readFile('./404.html', function(error, content) {
+                                response.writeHead(200, { 'Content-Type': 'text/html' });
+                                response.end(content, 'utf-8');
+                            });
+                        }
+                        else {
+                            response.writeHead(500);
+                            response.end('Sorry, check with the site admin for error: '+error.code+' ..\n');
+                            response.end();
+                        }
+                    } else {
+                        watch_file(filePath);
+                        fileContent[filePath] = content;
+                        response.writeHead(200, { 'Content-Type': contentType });
+                        response.end(content, 'utf-8');
                     }
-                    else {
-                        response.writeHead(500);
-                        response.end('Sorry, check with the site admin for error: '+error.code+' ..\n');
-                        response.end();
-                    }
-                }
-                else {
-                    fileContent[filePath] = content;
-                    response.writeHead(200, { 'Content-Type': contentType });
-                    response.end(content, 'utf-8');
-                    watch_file(filePath);
-                }
-            });
+                });
+            }
         } else {
             response.writeHead(200, { 'Content-Type': contentType });
             response.end(content, 'utf-8');
