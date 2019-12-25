@@ -3,11 +3,19 @@
 <body>
     <title>Web 01</title>
     <h1>Web 01</h1>
-    <textarea> Hellow World 01 (CHANGE 01)
+    <textarea> Hellow World 01
+CHANGE 1
  </textarea>
-
+    <script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.auto.min.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script src="/script/self-update.js"></script>
+    <script>
+        if (typeof self_update != "undefined" && location.href.indexOf("http") == 0) {
+            self_update(2)
+        } else {
+            console.log('Not updatable: ' + location.href)
+        }
+    </script>
 </body>
 
 </html>

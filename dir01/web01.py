@@ -1,5 +1,5 @@
 import os
-os.chdir(os.path.dirname(__file__))
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 content_fname = "web01-input.txt"
 html_template_fname = "web01-template.html"
