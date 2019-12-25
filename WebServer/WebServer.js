@@ -33,7 +33,7 @@ function update_fileLastModified(filePath) {
     fs.stat(filePath, function(err, stats) {
         var { mtime } = stats;
         fileLastModified[filePath] = mtime.toISOString();
-        console.log(`UPDATED: fileLastModified[${filePath}]`)
+        console.log(`SET: fileLastModified[${filePath}] = ${mtime.toISOString()}`)
     })
 }
 
