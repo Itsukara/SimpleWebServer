@@ -6,8 +6,8 @@ function self_update(interval) {
     function check_and_self_update() {
         axios.get(ask_url).then(function(res) {
             let lastModified =  res.data
-            console.log("firstFetched = " + firstFetched)
-            console.log("lastModified = " + lastModified)
+            // console.log("firstFetched = " + firstFetched)
+            // console.log("lastModified = " + lastModified)
             if (lastModified > firstFetched) {
                 console.log("Self-refresh")
                 location.href = location.href
